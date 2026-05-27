@@ -1,0 +1,27 @@
+FROM apache/airflow:2.9.1-python3.11
+
+USER root
+
+RUN apt-get update && apt-get install -y \
+openjdk-17-jre-headless \
+wget
+
+
+RUN mkdir -p /opt/spark/jars
+
+
+RUN wget https://repo1.maven.org/maven2/com/mysql/mysql-connector-j/8.3.0/mysql-connector-j-8.3.0.jar \
+-O /opt/spark/jars/mysql-connector-j-8.3.0.jar
+
+
+USER airflow
+
+
+COPY requirements.txt /tmp/
+
+
+RUN pip install --no-cache-dir \
+-r /tmp/requirements.txt
+
+
+WORKDIR /opt/airflow/project

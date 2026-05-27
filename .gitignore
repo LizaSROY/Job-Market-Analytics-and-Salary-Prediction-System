@@ -1,0 +1,22 @@
+# Raw datasets
+data/raw/*
+
+# Processed files
+data/processed/*
+
+# Generated ML files
+ml/models/*.pkl
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Spark files
+*.crc
+_SUCCESS
+
+# Mac
+.DS_Store
+
+# Logs
+logs/
