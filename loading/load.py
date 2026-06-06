@@ -2,7 +2,6 @@ import os
 import logging
 from pyspark.sql import SparkSession
 
-# MySQL settings
 MYSQL_HOST = os.getenv("MYSQL_HOST", "mysql")
 MYSQL_PORT = "3306"
 MYSQL_DB = "job_market"
@@ -17,11 +16,36 @@ logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
 
 
+def write_table(df, table_name):
+
+    log.info(f"Writing {table_name}...")
+
+    (
+        df.write
+        .format("jdbc")
+        .option("url", MYSQL_URL)
+        .option("dbtable", table_name)
+        .option("user", MYSQL_USER)
+        .option("password", MYSQL_PASSWORD)
+        .option("driver", "com.mysql.cj.jdbc.Driver")
+        .option("batchsize", 10000)
+        .mode("overwrite")
+        .save()
+    )
+
+    log.info(f"{table_name} written successfully")
+
+
 def load():
 
     spark = (
         SparkSession.builder
-        .appName("Load Job Market")
+        .master(
+            "spark://spark-master:7077"
+        )
+        .appName(
+            "Load Job Market Warehouse"
+        )
         .config(
             "spark.jars",
             "/opt/spark/jars/mysql-connector-j-8.3.0.jar"
@@ -31,63 +55,68 @@ def load():
 
     try:
 
-        log.info("Reading processed files...")
+        log.info("Reading warehouse parquet files...")
 
-        clean_df = spark.read.parquet(
-            "data/processed/job_market_clean.parquet"
+        bronze_df = spark.read.parquet(
+            "data/processed/bronze_job_market.parquet"
         )
 
-        analytics_df = spark.read.parquet(
-            "data/processed/job_market_analytics.parquet"
+        silver_df = spark.read.parquet(
+            "data/processed/silver_job_market.parquet"
         )
 
-        log.info(f"Clean rows: {clean_df.count()}")
-        log.info(f"Analytics rows: {analytics_df.count()}")
+        gold_country_df = spark.read.parquet(
+            "data/processed/gold_salary_country.parquet"
+        )
 
-        # ----------------------------
-        # Write cleaned table
-        # ----------------------------
+        gold_occupation_df = spark.read.parquet(
+            "data/processed/gold_top_occupations.parquet"
+        )
 
-        log.info("Writing cleaned table...")
+        gold_education_df = spark.read.parquet(
+            "data/processed/gold_education_distribution.parquet"
+        )
 
-        clean_df.write \
-            .format("jdbc") \
-            .option("url", MYSQL_URL) \
-            .option("dbtable", "job_market_clean") \
-            .option("user", MYSQL_USER) \
-            .option("password", MYSQL_PASSWORD) \
-            .option("driver", "com.mysql.cj.jdbc.Driver") \
-            .option("batchsize", 10000) \
-            .mode("overwrite") \
-            .save()
+        log.info(
+            f"Bronze rows: {bronze_df.count()}"
+        )
 
-        log.info("Clean table written successfully")
+        log.info(
+            f"Silver rows: {silver_df.count()}"
+        )
 
-        # ----------------------------
-        # Write analytics table
-        # ----------------------------
+        write_table(
+            bronze_df,
+            "bronze_job_market"
+        )
 
-        log.info("Writing analytics table...")
+        write_table(
+            silver_df,
+            "silver_job_market"
+        )
 
-        analytics_df.write \
-            .format("jdbc") \
-            .option("url", MYSQL_URL) \
-            .option("dbtable", "job_market_analytics") \
-            .option("user", MYSQL_USER) \
-            .option("password", MYSQL_PASSWORD) \
-            .option("driver", "com.mysql.cj.jdbc.Driver") \
-            .option("batchsize", 10000) \
-            .mode("overwrite") \
-            .save()
+        write_table(
+            gold_country_df,
+            "gold_salary_country"
+        )
 
-        log.info("Analytics table written successfully")
-        log.info("Load complete")
+        write_table(
+            gold_occupation_df,
+            "gold_top_occupations"
+        )
+
+        write_table(
+            gold_education_df,
+            "gold_education_distribution"
+        )
+
+        log.info(
+            "Warehouse loading completed"
+        )
 
     except Exception as e:
 
-        log.error("ERROR OCCURRED:")
         log.error(str(e))
-
         raise
 
     finally:

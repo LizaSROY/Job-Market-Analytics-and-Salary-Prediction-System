@@ -15,7 +15,8 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 PROC_DIR = BASE_DIR / "data" / "processed"
 
-INPUT_FILE = PROC_DIR / "job_market_clean.parquet"
+# Train from Silver layer
+INPUT_FILE = PROC_DIR / "silver_job_market.parquet"
 
 
 def preprocess():
@@ -24,8 +25,11 @@ def preprocess():
 
     df = pd.read_parquet(INPUT_FILE)
 
+    print(f"Rows: {len(df):,}")
+    print(f"Columns: {len(df.columns)}")
+
     # ==========================
-    # Feature selection
+    # Features
     # ==========================
 
     numeric_cols = [
@@ -57,9 +61,8 @@ def preprocess():
 
     y = df["salary"]
 
-
     # ==========================
-    # Preprocessing
+    # Preprocessor
     # ==========================
 
     preprocessor = ColumnTransformer(
@@ -83,7 +86,6 @@ def preprocess():
                 OneHotEncoder(
                     handle_unknown="ignore",
                     sparse_output=False
-                    
                 ),
 
                 categorical_cols
@@ -96,9 +98,12 @@ def preprocess():
 
     X = preprocessor.fit_transform(X)
 
+    print(
+        f"Feature count after encoding: {X.shape[1]}"
+    )
 
     # ==========================
-    # Train test split
+    # Train/Test Split
     # ==========================
 
     X_train, X_test, y_train, y_test = train_test_split(
@@ -112,33 +117,44 @@ def preprocess():
 
     )
 
+    print(
+        f"Train Rows: {len(X_train):,}"
+    )
+
+    print(
+        f"Test Rows: {len(X_test):,}"
+    )
 
     # ==========================
-    # Save files
+    # Save Arrays
     # ==========================
 
     np.save(
-        PROC_DIR/"X_train.npy",
+        PROC_DIR / "X_train.npy",
         X_train
     )
 
     np.save(
-        PROC_DIR/"X_test.npy",
+        PROC_DIR / "X_test.npy",
         X_test
     )
 
     np.save(
-        PROC_DIR/"y_train.npy",
+        PROC_DIR / "y_train.npy",
         y_train
     )
 
     np.save(
-        PROC_DIR/"y_test.npy",
+        PROC_DIR / "y_test.npy",
         y_test
     )
 
+    # ==========================
+    # Save Preprocessor
+    # ==========================
+
     with open(
-        PROC_DIR/"preprocessor.pkl",
+        PROC_DIR / "preprocessor.pkl",
         "wb"
     ) as file:
 
@@ -147,9 +163,22 @@ def preprocess():
             file
         )
 
-    print("Preprocessing completed")
+    # Save feature names for debugging
+    feature_names = (
+        preprocessor
+        .get_feature_names_out()
+    )
+
+    np.save(
+        PROC_DIR / "feature_names.npy",
+        feature_names
+    )
+
+    print(
+        "Preprocessing completed successfully"
+    )
 
 
-if __name__=="__main__":
+if __name__ == "__main__":
 
     preprocess()

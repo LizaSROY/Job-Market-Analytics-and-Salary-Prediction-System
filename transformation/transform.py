@@ -1,121 +1,140 @@
 from pathlib import Path
+
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import *
 
-# Folder paths
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-RAW_DIR = BASE_DIR / "data" / "raw"
 PROC_DIR = BASE_DIR / "data" / "processed"
 
-INPUT_FILE = str(
-    RAW_DIR / "job_market_raw.parquet"
+BRONZE_FILE = str(
+    PROC_DIR / "bronze_job_market.parquet"
 )
 
-OUTPUT_FILE = str(
-    PROC_DIR / "job_market_clean.parquet"
+SILVER_FILE = str(
+    PROC_DIR / "silver_job_market.parquet"
 )
 
-AGG_FILE = str(
-    PROC_DIR / "job_market_analytics.parquet"
+GOLD_COUNTRY_FILE = str(
+    PROC_DIR / "gold_salary_country.parquet"
+)
+
+GOLD_OCCUPATION_FILE = str(
+    PROC_DIR / "gold_top_occupations.parquet"
+)
+
+GOLD_EDUCATION_FILE = str(
+    PROC_DIR / "gold_education_distribution.parquet"
 )
 
 
 def transform():
 
-    print("Starting transformation...")
-
-    # Start Spark
-    spark = SparkSession.builder \
-        .appName("JobMarketTransform") \
+    spark = (
+        SparkSession.builder
+        .master(
+            "spark://spark-master:7077"
+        )
+        .appName(
+            "JobMarketTransform"
+        )
         .getOrCreate()
-
-    # Read extracted data
-    df = spark.read.parquet(INPUT_FILE)
-
-    print("Original rows:", df.count())
-
-    # Remove duplicates
-    df = df.dropDuplicates()
-
-    # Fill missing values
-    df = df.fillna({
-        "salary": 0,
-        "years_of_experience": 0
-    })
-
-    # Lowercase country
-    df = df.withColumn(
-        "country",
-        lower(col("country"))
     )
 
-    # Create experience level
-    df = df.withColumn(
-        "experience_level",
-        when(
-            col("years_of_experience") < 2,
-            "Junior"
-        )
-        .when(
-            col("years_of_experience") < 5,
-            "Mid"
-        )
-        .otherwise("Senior")
+    df = spark.read.parquet(
+        BRONZE_FILE
     )
 
-    # Create salary category
-    df = df.withColumn(
-        "salary_level",
-        when(
-            col("salary") < 30000,
-            "Low"
+    print("Bronze rows:", df.count())
+
+    silver_df = (
+        df
+        .dropDuplicates()
+        .fillna({
+            "salary": 0,
+            "years_of_experience": 0
+        })
+        .withColumn(
+            "country",
+            lower(col("country"))
         )
-        .when(
-            col("salary") < 70000,
-            "Medium"
+        .withColumn(
+            "experience_level",
+            when(
+                col("years_of_experience") < 2,
+                "Junior"
+            )
+            .when(
+                col("years_of_experience") < 5,
+                "Mid"
+            )
+            .otherwise(
+                "Senior"
+            )
         )
-        .otherwise("High")
+        .withColumn(
+            "salary_level",
+            when(
+                col("salary") < 30000,
+                "Low"
+            )
+            .when(
+                col("salary") < 70000,
+                "Medium"
+            )
+            .otherwise(
+                "High"
+            )
+        )
     )
 
-    # Save cleaned data
-    PROC_DIR.mkdir(
-        parents=True,
-        exist_ok=True
-    )
-
-    df.write.mode(
+    silver_df.write.mode(
         "overwrite"
     ).parquet(
-        OUTPUT_FILE
+        SILVER_FILE
     )
 
-    print("Cleaned dataset saved")
-
-    # Analytics table
-    analytics = df.groupBy(
-        "country"
-    ).agg(
-        avg("salary").alias(
-            "average_salary"
-        ),
-        count("*").alias(
-            "total_jobs"
+    gold_country = (
+        silver_df
+        .groupBy("country")
+        .agg(
+            avg("salary").alias(
+                "average_salary"
+            ),
+            count("*").alias(
+                "total_jobs"
+            )
         )
     )
 
-    analytics.write.mode(
+    gold_country.write.mode(
         "overwrite"
     ).parquet(
-        AGG_FILE
+        GOLD_COUNTRY_FILE
     )
 
-    print("Analytics dataset saved")
+    gold_occupation = (
+        silver_df
+        .groupBy("occupation")
+        .count()
+    )
+
+    gold_occupation.write.mode(
+        "overwrite"
+    ).parquet(
+        GOLD_OCCUPATION_FILE
+    )
+
+    gold_education = (
+        silver_df
+        .groupBy("education_level")
+        .count()
+    )
+
+    gold_education.write.mode(
+        "overwrite"
+    ).parquet(
+        GOLD_EDUCATION_FILE
+    )
 
     spark.stop()
-
-    print("Transformation completed")
-
-
-if __name__ == "__main__":
-    transform()
