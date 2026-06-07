@@ -138,8 +138,8 @@ job_market/
 ├── streamlit_app/
 │   ├── app.py
 │   └── pages/
-│       ├── 1_Analytics.py
-│       └── 2_Salary_Prediction.py
+│       ├── analytics.py
+│       └── prediction.py
 │
 ├── dags/
 │   └── job_market_pipeline.py
